@@ -29,6 +29,25 @@ interface ProcessedData {
   [key: string]: ZipData;
 }
 
+// Define GeoJSON types
+interface ZipProperties extends ZipData {
+  zip: string;
+}
+
+interface ZipFeature {
+  type: 'Feature';
+  properties: Partial<ZipProperties>;
+  geometry: {
+    type: string;
+    coordinates: number[][][];
+  };
+}
+
+interface ZipGeoJSON {
+  type: 'FeatureCollection';
+  features: ZipFeature[];
+}
+
 export default function ZIPMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -109,12 +128,12 @@ export default function ZIPMap() {
       try {
         // Load GeoJSON data
         const geoJsonResponse = await fetch('/data/zip_codes.geojson');
-        const geoJson = await geoJsonResponse.json();
+        const geoJson = await geoJsonResponse.json() as ZipGeoJSON;
 
         // Add centile scores to GeoJSON
-        geoJson.features = geoJson.features.map(feature => {
+        geoJson.features = geoJson.features.map((feature: ZipFeature) => {
           const zipCode = feature.properties.zip;
-          const zipData = data[zipCode];
+          const zipData = zipCode ? data[zipCode] : null;
           if (zipData) {
             feature.properties = { ...feature.properties, ...zipData };
           }
@@ -172,7 +191,7 @@ export default function ZIPMap() {
 
           map.current.on('mousemove', 'zip-codes-fill', (e) => {
             if (e.features && e.features.length > 0) {
-              const feature = e.features[0];
+              const feature = e.features[0] as ZipFeature;
               if (feature.properties.centileScore) {
                 const html = `
                   <div style="padding: 8px;">
