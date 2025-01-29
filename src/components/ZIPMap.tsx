@@ -5,12 +5,36 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { read, utils } from 'xlsx';
 
+// Define types for our Excel data
+interface ExcelRow {
+  __EMPTY: number;
+  __EMPTY_1: number;
+  __EMPTY_4?: string;
+  __EMPTY_5?: string;
+  __EMPTY_6?: number;
+  __EMPTY_8?: number;
+  __EMPTY_9?: number;
+}
+
+interface ZipData {
+  centileScore: number;
+  city: string;
+  state: string;
+  population: number;
+  bachelorsPct: number;
+  medianIncome: number;
+}
+
+interface ProcessedData {
+  [key: string]: ZipData;
+}
+
 export default function ZIPMap() {
-  const mapContainer = useRef(null);
-  const map = useRef(null);
-  const [data, setData] = useState(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const [data, setData] = useState<ProcessedData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [mapInitialized, setMapInitialized] = useState(false);
 
   // Load Excel data
@@ -22,17 +46,17 @@ export default function ZIPMap() {
         const workbook = read(arrayBuffer);
         
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawData = utils.sheet_to_json(firstSheet, { range: 6 });
+        const rawData = utils.sheet_to_json<ExcelRow>(firstSheet, { range: 6 });
         
-        const processedData = rawData.slice(1).reduce((acc, row) => {
-          if (row['__EMPTY'] && !isNaN(row['__EMPTY'])) {
-            acc[row['__EMPTY']] = {
-              centileScore: row['__EMPTY_1'],
-              city: row['__EMPTY_4'] || 'Unknown',
-              state: row['__EMPTY_5'] || 'Unknown',
-              population: row['__EMPTY_6'] || 0,
-              bachelorsPct: (row['__EMPTY_8'] || 0) * 100,
-              medianIncome: row['__EMPTY_9'] || 0
+        const processedData = rawData.slice(1).reduce<ProcessedData>((acc, row) => {
+          if (row.__EMPTY && !isNaN(row.__EMPTY)) {
+            acc[row.__EMPTY] = {
+              centileScore: row.__EMPTY_1,
+              city: row.__EMPTY_4 || 'Unknown',
+              state: row.__EMPTY_5 || 'Unknown',
+              population: row.__EMPTY_6 || 0,
+              bachelorsPct: (row.__EMPTY_8 || 0) * 100,
+              medianIncome: row.__EMPTY_9 || 0
             };
           }
           return acc;
@@ -42,7 +66,7 @@ export default function ZIPMap() {
         setLoading(false);
       } catch (err) {
         console.error('Error loading data:', err);
-        setError(err.message);
+        setError(err instanceof Error ? err.message : 'Unknown error');
         setLoading(false);
       }
     };
@@ -56,19 +80,21 @@ export default function ZIPMap() {
 
     mapboxgl.accessToken = 'pk.eyJ1IjoiYmhlc3MwMTYiLCJhIjoiY202Z2tjY3gyMDI1YzJqcGxqdzY1d2pzNSJ9.JGl2a_Cvy6jhHZg3AwV8zg';
     
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/light-v10',
-      center: [-98.5795, 39.8283],
-      zoom: 4
-    });
+    if (mapContainer.current) {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/light-v10',
+        center: [-98.5795, 39.8283],
+        zoom: 4
+      });
 
-    map.current.on('load', () => {
-      setMapInitialized(true);
-    });
+      map.current.on('load', () => {
+        setMapInitialized(true);
+      });
 
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      // Add navigation controls
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    }
 
     return () => {
       if (map.current) map.current.remove();
@@ -145,7 +171,7 @@ export default function ZIPMap() {
           });
 
           map.current.on('mousemove', 'zip-codes-fill', (e) => {
-            if (e.features.length > 0) {
+            if (e.features && e.features.length > 0) {
               const feature = e.features[0];
               if (feature.properties.centileScore) {
                 const html = `
@@ -170,7 +196,7 @@ export default function ZIPMap() {
         }
       } catch (err) {
         console.error('Error loading GeoJSON:', err);
-        setError('Error loading ZIP code boundaries: ' + err.message);
+        setError('Error loading ZIP code boundaries: ' + (err instanceof Error ? err.message : 'Unknown error'));
       }
     };
 
